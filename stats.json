@@ -1,0 +1,95 @@
+{
+ "built": "2026-11-07",
+ "bytes_gz": 113512,
+ "bytes_raw": 729075,
+ "land_cells": 847573,
+ "shares": {
+  "fast": 0.144,
+  "medium": 0.201,
+  "slow": 0.655
+ },
+ "cells_slowed_by_clay": 17640,
+ "soilgrids": true,
+ "fields": {
+  "bedrock": [
+   "RCS_D",
+   "LEX_D"
+  ],
+  "superficial": [
+   "ROCK_D",
+   "LEX_D"
+  ]
+ },
+ "sites": [
+  {
+   "site": "Salisbury Plain (chalk)",
+   "class": "fast",
+   "bedrock": "WHITE CHALK SUBGROUP; CHALK",
+   "superficial": "",
+   "clay_pct": 27.2
+  },
+  {
+   "site": "Ridgeway, Uffington (chalk)",
+   "class": "medium",
+   "bedrock": "WHITE CHALK SUBGROUP; CHALK",
+   "superficial": "",
+   "clay_pct": 37.3
+  },
+  {
+   "site": "Vale of Aylesbury (clay)",
+   "class": "slow",
+   "bedrock": "WEST WALTON FORMATION, AMPTHILL CLAY FORMATION AND KIMMERIDGE CLAY FORMATION (UNDIFFERENTIATED); MUDSTONE, SILTSTONE AND SANDSTONE",
+   "superficial": "",
+   "clay_pct": 30.4
+  },
+  {
+   "site": "Sussex Weald (clay)",
+   "class": "medium",
+   "bedrock": "WEALDEN GROUP; SANDSTONE AND SILTSTONE, INTERBEDDED",
+   "superficial": "",
+   "clay_pct": 26.9
+  },
+  {
+   "site": "Haccombe, Devon",
+   "class": "fast",
+   "bedrock": "PERMIAN ROCKS (UNDIFFERENTIATED); SANDSTONE AND CONGLOMERATE, INTERBEDDED",
+   "superficial": "",
+   "clay_pct": 18.9
+  },
+  {
+   "site": "Dartmoor (granite, peat)",
+   "class": "medium",
+   "bedrock": "UNNAMED IGNEOUS INTRUSION, CARBONIFEROUS TO PERMIAN; FELSIC-ROCK",
+   "superficial": "",
+   "clay_pct": 19.6
+  },
+  {
+   "site": "Peak District, Long Causeway",
+   "class": "slow",
+   "bedrock": "MILLSTONE GRIT GROUP [SEE ALSO MIGR]; MUDSTONE, SILTSTONE AND SANDSTONE",
+   "superficial": "",
+   "clay_pct": 22.8
+  },
+  {
+   "site": "Yorkshire Dales (limestone)",
+   "class": "slow",
+   "bedrock": "DINANTIAN ROCKS (UNDIFFERENTIATED); LIMESTONE WITH SUBORDINATE SANDSTONE AND ARGILLACEOUS ROCKS",
+   "superficial": "ALLUVIUM; CLAY, SILT AND SAND",
+   "clay_pct": 22.6
+  },
+  {
+   "site": "Breckland (sand)",
+   "class": "fast",
+   "bedrock": "WHITE CHALK SUBGROUP; CHALK",
+   "superficial": "RIVER TERRACE DEPOSITS (UNDIFFERENTIATED); SAND AND GRAVEL",
+   "clay_pct": 16.6
+  },
+  {
+   "site": "Fens (peat/clay)",
+   "class": "slow",
+   "bedrock": "WEST WALTON FORMATION, AMPTHILL CLAY FORMATION AND KIMMERIDGE CLAY FORMATION (UNDIFFERENTIATED); MUDSTONE, SILTSTONE AND SANDSTONE",
+   "superficial": "PEAT",
+   "clay_pct": 43.2
+  }
+ ]
+}
