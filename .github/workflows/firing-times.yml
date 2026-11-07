@@ -1,0 +1,54 @@
+# MoD firing times for the app: gov.uk firing-times publications (OGL) and
+# OpenStreetMap military danger areas (ODbL), pushed to the `firing-data`
+# branch. The app reads firing.json from there (no sign-in).
+# gov.uk and Overpass can't be reached from the dev sandbox.
+name: MoD firing times
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 4 * * *' # daily, ~1 min of Linux time
+
+concurrency:
+  group: firing-times
+  cancel-in-progress: false
+
+# pipefail: a failed build piped into tee must stop the job before the push.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  firing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # pushes the firing-data branch
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Snapshot gov.uk firing times and OSM danger areas
+        run: python tools/firing/firing.py snapshot --out "$RUNNER_TEMP/firing/raw"
+
+      - name: Build firing.json for the app
+        run: python tools/firing/firing.py build --raw "$RUNNER_TEMP/firing/raw" --out "$RUNNER_TEMP/firing/firing.json" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Push to the firing-data branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "$RUNNER_TEMP/firing"
+          printf '%s\n' "# MoD firing times" "" \
+            "Made by the MoD firing times workflow on $(date -u +%F)." \
+            "Sources: gov.uk (Open Government Licence), OpenStreetMap danger areas (ODbL)." > README.md
+          git init -q -b firing-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Firing times $(date -u +%F)"
+          git push -fq "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" firing-data
+          du -sh raw | tee -a "$GITHUB_STEP_SUMMARY"

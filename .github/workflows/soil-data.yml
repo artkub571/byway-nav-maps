@@ -1,0 +1,57 @@
+# Soil drainage map for the app's mud forecast: BGS Geology 625k (OGL) and
+# SoilGrids topsoil clay (CC BY 4.0) on a ~500 m grid, pushed to the
+# `soil-data` branch. The app downloads it once (no sign-in).
+# Geology doesn't change, so this only needs running again when the rules in
+# tools/soil change. BGS and ISRIC can't be reached from the dev sandbox.
+name: Soil drainage map
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: soil-data
+  cancel-in-progress: false
+
+# pipefail: a failed build piped into tee must stop the job before the push.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  soil:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write # pushes the soil-data branch
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install GIS packages
+        run: pip install -q numpy geopandas pyogrio rasterio pillow shapely pytest
+
+      - name: Rules tests
+        run: python -m pytest -q tools/soil/tests
+
+      - name: Build the drainage map
+        run: python tools/soil/drainage.py build --out "$RUNNER_TEMP/soil/out" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Push to the soil-data branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "$RUNNER_TEMP/soil/out"
+          printf '%s\n' "# Soil drainage map" "" \
+            "Made by the Soil drainage map workflow on $(date -u +%F)." \
+            "Contains British Geological Survey materials © UKRI (Open Government Licence)." \
+            "SoilGrids topsoil clay © ISRIC (CC BY 4.0), if stats.json says soilgrids: true." > README.md
+          git init -q -b soil-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Soil drainage map $(date -u +%F)"
+          git push -fq "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" soil-data
+          ls -la | tee -a "$GITHUB_STEP_SUMMARY"

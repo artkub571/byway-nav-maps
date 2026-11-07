@@ -1,0 +1,57 @@
+# Twisty roads for the app's "Road fun" routing: curvature of Great
+# Britain's paved roads from OpenStreetMap (Geofabrik extract, ODbL),
+# pushed to the `twisty-data` branch. The app downloads it once (no sign-in).
+# Roads change slowly: run it again every few months, or
+# after changing tools/twisty.
+name: Twisty roads (GB)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: twisty-data
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash # with pipefail: a failed build stops the job before the push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write # pushes the twisty-data branch
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Tools
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q osmium-tool
+          pip install -q numpy shapely pillow pytest
+      - name: Rules tests
+        run: python -m pytest -q tools/twisty/tests
+      - name: Download Great Britain (Geofabrik)
+        run: |
+          curl -fsSL --retry 4 -o "$RUNNER_TEMP/gb.osm.pbf" https://download.geofabrik.de/europe/great-britain-latest.osm.pbf \
+            || curl -fsSL --retry 4 -o "$RUNNER_TEMP/gb.osm.pbf" https://download.geofabrik.de/europe/united-kingdom-latest.osm.pbf
+          ls -la "$RUNNER_TEMP/gb.osm.pbf"
+      - name: Find twisty roads
+        run: python tools/twisty/twisty.py build --pbf "$RUNNER_TEMP/gb.osm.pbf" --out "$RUNNER_TEMP/twisty/out" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Push to the twisty-data branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "$RUNNER_TEMP/twisty/out"
+          printf '%s\n' "# Twisty roads (GB)" "" \
+            "Made by the Twisty roads (GB) workflow on $(date -u +%F)." \
+            "From OpenStreetMap data, © OpenStreetMap contributors (ODbL), Geofabrik extract." > README.md
+          git init -q -b twisty-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Twisty roads $(date -u +%F)"
+          git push -fq "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" twisty-data
+          ls -la | tee -a "$GITHUB_STEP_SUMMARY"

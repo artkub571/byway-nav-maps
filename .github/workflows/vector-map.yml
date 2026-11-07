@@ -1,0 +1,115 @@
+# Builds the offline vector map of Great Britain (OpenStreetMap data via the
+# Protomaps daily build, ODbL) as PMTiles files. Manual: Actions → "Vector map
+# (GB)" → Run workflow.
+#
+# * Cuts Great Britain (not Ireland) from the latest Protomaps build with
+#   `pmtiles extract`, which fetches only the needed byte ranges.
+# * Publishes the files as a release in this public repo, which the app
+#   downloads from (Settings → Offline maps → Vector map).
+# * Pushes a small Salisbury Plain sample to the `vector-sample` branch, for
+#   development and tests.
+name: Vector map (GB)
+
+on:
+  workflow_dispatch:
+    inputs:
+      maxzoom:
+        description: Highest zoom with its own data (the map draws closer by enlarging it)
+        type: choice
+        options: ['14', '15']
+        default: '14'
+
+concurrency:
+  group: vector-map
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write # release + sample branch
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: pmtiles CLI
+        run: |
+          gh release download --repo protomaps/go-pmtiles --pattern '*Linux_x86_64.tar.gz' --output pm.tgz
+          tar xzf pm.tgz pmtiles
+          ./pmtiles version
+
+      - name: Latest Protomaps build
+        id: src
+        run: |
+          key=$(curl -sS https://build-metadata.protomaps.dev/builds.json | python3 -c "
+          import sys, json, re
+          b = json.load(sys.stdin)
+          keys = sorted(k for k in (x.get('key', '') for x in b) if re.fullmatch(r'\d{8}\.pmtiles', k))
+          print(keys[-1])")
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          echo "date=${key%.pmtiles}" >> "$GITHUB_OUTPUT"
+          echo "Protomaps build: $key" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Great Britain outline (excludes Ireland)
+        run: |
+          cat > gb.geojson <<'EOF'
+          {"type": "Polygon", "coordinates": [[
+            [-6.5, 49.8], [1.9, 49.8], [1.9, 61.0], [-8.0, 61.0], [-8.0, 55.45],
+            [-5.3, 55.45], [-5.3, 53.5], [-5.8, 53.5], [-5.8, 51.4], [-6.5, 51.4], [-6.5, 49.8]
+          ]]}
+          EOF
+
+      - name: Extract
+        run: |
+          src="https://build.protomaps.com/${{ steps.src.outputs.key }}"
+          z=${{ inputs.maxzoom }}
+          ./pmtiles extract "$src" gb.pmtiles --region=gb.geojson --maxzoom="$z" --download-threads=8
+          ./pmtiles extract "$src" sample.pmtiles --bbox=-2.1,51.0,-1.5,51.4 --maxzoom="$z"
+          # size of the other zoom choice, for comparison only
+          other=$([ "$z" = 15 ] && echo 14 || echo 15)
+          ./pmtiles extract "$src" other.pmtiles --region=gb.geojson --maxzoom="$other" --download-threads=8 --dry-run 2>&1 | tail -5 > other.txt || true
+          ls -la gb.pmtiles sample.pmtiles
+          {
+            echo "### Sizes"
+            echo "- gb.pmtiles (maxzoom $z): $(du -h gb.pmtiles | cut -f1)"
+            echo "- sample.pmtiles (Salisbury Plain): $(du -h sample.pmtiles | cut -f1)"
+            echo "- maxzoom $other estimate:"; echo '```'; cat other.txt; echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          ./pmtiles show gb.pmtiles | head -30
+
+      - name: Sample to the vector-sample branch
+        run: |
+          mkdir -p "$RUNNER_TEMP/s" && cp sample.pmtiles "$RUNNER_TEMP/s/"
+          cd "$RUNNER_TEMP/s"
+          printf '%s\n' "Salisbury Plain sample of the GB vector map (OpenStreetMap © contributors, ODbL; Protomaps build ${{ steps.src.outputs.key }})." > README.md
+          git init -q -b vector-sample
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A && git commit -qm "vector map sample ${{ steps.src.outputs.date }}"
+          git push -fq "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" vector-sample
+
+      - name: Publish release (files over 1.9 GB split into parts)
+        run: |
+          tag="vector-map-gb-${{ steps.src.outputs.date }}-z${{ inputs.maxzoom }}"
+          size=$(stat -c %s gb.pmtiles)
+          sha=$(sha256sum gb.pmtiles | cut -d' ' -f1)
+          if [ "$size" -gt 1900000000 ]; then
+            split -b 1900000000 -d -a 2 gb.pmtiles gb.pmtiles.part
+            parts=$(ls gb.pmtiles.part* | sort)
+          else
+            parts=gb.pmtiles
+          fi
+          python3 - "$size" "$sha" ${{ inputs.maxzoom }} ${{ steps.src.outputs.date }} $parts > manifest.json <<'PY'
+          import json, os, sys
+          size, sha, z, date, *parts = sys.argv[1:]
+          print(json.dumps({"file": "gb.pmtiles", "size": int(size), "sha256": sha, "maxzoom": int(z),
+                            "build": date, "parts": [{"name": p, "size": os.path.getsize(p)} for p in parts]}, indent=1))
+          PY
+          cat manifest.json
+          gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$tag" manifest.json $parts sample.pmtiles \
+            --title "Vector map GB ${{ steps.src.outputs.date }} (z${{ inputs.maxzoom }})" \
+            --notes "OpenStreetMap data © OpenStreetMap contributors (ODbL), via the Protomaps build ${{ steps.src.outputs.key }}. For the Byway Nav app's offline vector map."
+          echo "Release: $tag ($(du -h gb.pmtiles | cut -f1) in $(echo $parts | wc -w) file(s))" >> "$GITHUB_STEP_SUMMARY"
